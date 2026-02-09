@@ -1,0 +1,152 @@
+<main class="app-shell">
+  <section class="panel">
+    <header>
+      <h1>Travel Globe Animator</h1>
+      <p>Build a cinematic arc between two cities and export it in 4K.</p>
+    </header>
+
+    <div class="field-grid">
+      <label>
+        <span>From city</span>
+        <input type="text" [formControl]="fromControl" placeholder="e.g. Lisbon" />
+      </label>
+
+      <label>
+        <span>To city</span>
+        <input type="text" [formControl]="toControl" placeholder="e.g. Tokyo" />
+      </label>
+    </div>
+
+    <div class="suggestions-row">
+      <div class="suggestions">
+        @for (item of fromSuggestions(); track item.displayName) {
+          <button type="button" (click)="selectFromCity(item)">{{ item.displayName }}</button>
+        }
+      </div>
+
+      <div class="suggestions">
+        @for (item of toSuggestions(); track item.displayName) {
+          <button type="button" (click)="selectToCity(item)">{{ item.displayName }}</button>
+        }
+      </div>
+    </div>
+
+    <div class="controls-row">
+      <label>
+        <span>Duration (sec)</span>
+        <input
+          type="number"
+          min="2"
+          max="90"
+          step="1"
+          [value]="state.durationSec()"
+          (input)="onDurationInput($any($event.target).valueAsNumber)"
+        />
+      </label>
+
+      <label>
+        <span>Arc height (km)</span>
+        <input
+          type="number"
+          min="50"
+          max="3000"
+          step="50"
+          [value]="state.arcHeightKm()"
+          (input)="onArcHeightInput($any($event.target).valueAsNumber)"
+        />
+      </label>
+
+      <button type="button" class="solid" (click)="buildRoute()">Build route</button>
+    </div>
+
+    <div class="timeline-row">
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.001"
+        [value]="state.progress()"
+        (input)="state.setProgress($any($event.target).valueAsNumber); globe?.setProgress(state.progress())"
+      />
+      <strong>{{ (state.progress() * 100).toFixed(1) }}%</strong>
+    </div>
+
+    <div class="action-row">
+      <button type="button" (click)="play()" [disabled]="exporting()">Play</button>
+      <button type="button" (click)="pause()" [disabled]="!state.playing() || exporting()">Pause</button>
+      <button type="button" (click)="reset()" [disabled]="exporting()">Reset</button>
+      <button type="button" (click)="fitToRoute()" [disabled]="exporting()">Fit to route</button>
+      <button type="button" class="warn" (click)="export4k()" [disabled]="exporting()">
+        {{ exporting() ? 'Exporting...' : 'Export 4K video' }}
+      </button>
+    </div>
+
+    <button type="button" class="link" (click)="showAdvanced.set(!showAdvanced())">
+      {{ showAdvanced() ? 'Hide advanced coordinates' : 'Show advanced coordinates' }}
+    </button>
+
+    @if (showAdvanced()) {
+      <section class="advanced">
+        <label>
+          <span>From lat,lng</span>
+          <div>
+            <input
+              type="number"
+              step="0.0001"
+              placeholder="lat"
+              [value]="manualFromLat()"
+              (input)="manualFromLat.set($any($event.target).value)"
+            />
+            <input
+              type="number"
+              step="0.0001"
+              placeholder="lng"
+              [value]="manualFromLng()"
+              (input)="manualFromLng.set($any($event.target).value)"
+            />
+          </div>
+        </label>
+
+        <label>
+          <span>To lat,lng</span>
+          <div>
+            <input
+              type="number"
+              step="0.0001"
+              placeholder="lat"
+              [value]="manualToLat()"
+              (input)="manualToLat.set($any($event.target).value)"
+            />
+            <input
+              type="number"
+              step="0.0001"
+              placeholder="lng"
+              [value]="manualToLng()"
+              (input)="manualToLng.set($any($event.target).value)"
+            />
+          </div>
+        </label>
+      </section>
+    }
+
+    @if (nominatimMessage()) {
+      <p class="note warning">{{ nominatimMessage() }}</p>
+    }
+
+    @if (exportProgressLabel()) {
+      <p class="note">{{ exportProgressLabel() }}</p>
+    }
+
+    @if (exportWarning()) {
+      <p class="note warning">{{ exportWarning() }}</p>
+    }
+
+    @if (statusMessage()) {
+      <p class="note">{{ statusMessage() }}</p>
+    }
+  </section>
+
+  <section class="globe-wrap">
+    <app-globe-view #globe></app-globe-view>
+  </section>
+</main>
