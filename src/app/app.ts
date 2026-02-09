@@ -10,7 +10,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { catchError, debounceTime, distinctUntilChanged, of, switchMap, tap } from 'rxjs';
-import { CarrierLogo, GeoPoint, GeocodeResult } from './models/types';
+import { CarrierLogo, GeocodeResult } from './models/types';
 import { GlobeViewComponent } from './globe-view/globe-view.component';
 import { ExportService } from './services/export.service';
 import { GeocodingService } from './services/geocoding.service';
@@ -36,11 +36,6 @@ export class App {
 
   readonly nominatimMessage = signal('');
   readonly statusMessage = signal('');
-
-  readonly manualFromLat = signal('');
-  readonly manualFromLng = signal('');
-  readonly manualToLat = signal('');
-  readonly manualToLng = signal('');
 
   readonly exporting = signal(false);
   readonly exportWarning = signal('');
@@ -108,11 +103,11 @@ export class App {
   }
 
   buildRoute(): void {
-    const from = this.state.fromCoord() ?? this.parseManual(this.manualFromLat(), this.manualFromLng());
-    const to = this.state.toCoord() ?? this.parseManual(this.manualToLat(), this.manualToLng());
+    const from = this.state.fromCoord();
+    const to = this.state.toCoord();
 
     if (!from || !to) {
-      this.statusMessage.set('Укажите города из подсказок или введите обе пары координат в Advanced.');
+      this.statusMessage.set('Выберите оба города из подсказок.');
       return;
     }
 
@@ -256,21 +251,6 @@ export class App {
           this.nominatimMessage.set('');
         }
       });
-  }
-
-  private parseManual(latText: string, lngText: string): GeoPoint | null {
-    const lat = Number(latText);
-    const lng = Number(lngText);
-
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return null;
-    }
-
-    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-      return null;
-    }
-
-    return { lat, lng };
   }
 
   private stopAnimation(): void {
