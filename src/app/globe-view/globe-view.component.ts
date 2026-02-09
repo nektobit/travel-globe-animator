@@ -81,14 +81,14 @@ export class GlobeViewComponent implements AfterViewInit, OnDestroy {
 
     this.activeRouteEntity = this.viewer.entities.add({
       polyline: {
-        positions: new Cesium.CallbackProperty(() => this.visibleRoutePositions(), false),
+        positions: [],
         width: 4,
         material: Cesium.Color.fromCssColorString('#f7f4ea')
       }
     });
 
     this.planeEntity = this.viewer.entities.add({
-      position: new Cesium.CallbackPositionProperty(() => this.currentPlanePosition(), false),
+      position: new Cesium.ConstantPositionProperty(this.routeCartesians[0]),
       billboard: {
         image: makeCarrierLogoDataUrl(this.carrierLogo),
         verticalOrigin: Cesium.VerticalOrigin.CENTER,
@@ -112,7 +112,9 @@ export class GlobeViewComponent implements AfterViewInit, OnDestroy {
   }
 
   setProgress(progress: number): void {
-    this.progress.set(Math.min(1, Math.max(0, progress)));
+    const normalized = Math.min(1, Math.max(0, progress));
+    this.progress.set(normalized);
+    this.applyProgressToEntities(normalized);
     this.viewer?.scene.render();
   }
 
@@ -212,10 +214,10 @@ export class GlobeViewComponent implements AfterViewInit, OnDestroy {
         navigationHelpButton: false,
         selectionIndicator: false,
         infoBox: false,
-        requestRenderMode: true,
-        maximumRenderTimeChange: Number.POSITIVE_INFINITY,
+        requestRenderMode: false,
         terrain: undefined
       });
+      this.viewer.targetFrameRate = 60;
 
       this.viewer.imageryLayers.removeAll();
       this.viewer.imageryLayers.addImageryProvider(imageryProvider);
@@ -286,24 +288,58 @@ export class GlobeViewComponent implements AfterViewInit, OnDestroy {
   }
 
   private visibleRoutePositions(): Cesium.Cartesian3[] {
+    return this.visibleRoutePositionsFor(this.progress());
+  }
+
+  private visibleRoutePositionsFor(progress: number): Cesium.Cartesian3[] {
     if (!this.routeCartesians.length) {
       return [];
     }
 
-    const index = Math.max(1, Math.floor(this.progress() * (this.routeCartesians.length - 1)) + 1);
+    const index = Math.max(1, Math.floor(progress * (this.routeCartesians.length - 1)) + 1);
     return this.routeCartesians.slice(0, index);
   }
 
   private currentPlanePosition(): Cesium.Cartesian3 {
+    return this.currentPlanePositionFor(this.progress());
+  }
+
+  private currentPlanePositionFor(progress: number): Cesium.Cartesian3 {
     if (!this.routeCartesians.length) {
       return Cesium.Cartesian3.ZERO;
     }
 
-    const index = Math.min(
-      this.routeCartesians.length - 1,
-      Math.round(this.progress() * (this.routeCartesians.length - 1))
+    if (this.routeCartesians.length === 1) {
+      return this.routeCartesians[0];
+    }
+
+    const scaled = progress * (this.routeCartesians.length - 1);
+    const fromIndex = Math.floor(scaled);
+    const toIndex = Math.min(this.routeCartesians.length - 1, fromIndex + 1);
+    const t = scaled - fromIndex;
+
+    if (fromIndex === toIndex) {
+      return this.routeCartesians[fromIndex];
+    }
+
+    return Cesium.Cartesian3.lerp(
+      this.routeCartesians[fromIndex],
+      this.routeCartesians[toIndex],
+      t,
+      new Cesium.Cartesian3()
     );
-    return this.routeCartesians[index];
+  }
+
+  private applyProgressToEntities(progress: number): void {
+    if (!this.activeRouteEntity?.polyline || !this.planeEntity) {
+      return;
+    }
+
+    const visiblePositions = this.visibleRoutePositionsFor(progress);
+    this.activeRouteEntity.polyline.positions = new Cesium.ConstantProperty(visiblePositions);
+    this.planeEntity.position = new Cesium.ConstantPositionProperty(
+      this.currentPlanePositionFor(progress)
+    );
   }
 }
 

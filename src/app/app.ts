@@ -34,7 +34,6 @@ export class App {
   readonly fromSuggestions = signal<GeocodeResult[]>([]);
   readonly toSuggestions = signal<GeocodeResult[]>([]);
 
-  readonly showAdvanced = signal(false);
   readonly nominatimMessage = signal('');
   readonly statusMessage = signal('');
 
@@ -80,6 +79,10 @@ export class App {
     this.state.setArcHeightKm(value);
   }
 
+  onRoutePointCountInput(value: number): void {
+    this.state.setRoutePointCount(value);
+  }
+
   onCarrierLogoChange(value: string): void {
     const normalized = value as CarrierLogo;
     if (!this.carrierLogoOptions.some((item) => item.value === normalized)) {
@@ -116,7 +119,12 @@ export class App {
     this.state.setFromCoord(from);
     this.state.setToCoord(to);
 
-    const routePoints = buildGreatCircleArc(from, to, this.state.arcHeightKm(), 200);
+    const routePoints = buildGreatCircleArc(
+      from,
+      to,
+      this.state.arcHeightKm(),
+      this.state.routePointCount()
+    );
     this.state.setRoute(routePoints);
     this.globe?.setCarrierLogo(this.state.carrierLogo());
     this.globe?.setRoute(routePoints);

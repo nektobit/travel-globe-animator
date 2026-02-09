@@ -12,6 +12,7 @@ export class ProjectStateService {
   readonly routePoints = signal<RoutePoint[]>([]);
   readonly durationSec = signal(8);
   readonly arcHeightKm = signal(800);
+  readonly routePointCount = signal(400);
   readonly carrierLogo = signal<CarrierLogo>('s7');
 
   readonly playing = signal(false);
@@ -33,6 +34,11 @@ export class ProjectStateService {
   setArcHeightKm(value: number): void {
     const clamped = Number.isFinite(value) ? Math.min(3000, Math.max(50, value)) : 800;
     this.arcHeightKm.set(clamped);
+  }
+
+  setRoutePointCount(value: number): void {
+    const clamped = Number.isFinite(value) ? Math.min(2000, Math.max(100, Math.round(value))) : 400;
+    this.routePointCount.set(clamped);
   }
 
   setCarrierLogo(value: CarrierLogo): void {
