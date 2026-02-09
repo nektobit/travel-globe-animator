@@ -56,6 +56,15 @@
         />
       </label>
 
+      <label>
+        <span>Route marker</span>
+        <select [value]="state.carrierLogo()" (change)="onCarrierLogoChange($any($event.target).value)">
+          @for (item of carrierLogoOptions; track item.value) {
+            <option [value]="item.value">{{ item.label }}</option>
+          }
+        </select>
+      </label>
+
       <button type="button" class="solid" (click)="buildRoute()">Build route</button>
     </div>
 

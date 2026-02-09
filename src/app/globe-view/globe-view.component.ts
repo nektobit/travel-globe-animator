@@ -8,7 +8,7 @@ import {
   signal
 } from '@angular/core';
 import * as Cesium from 'cesium';
-import { RoutePoint } from '../models/types';
+import { CarrierLogo, RoutePoint } from '../models/types';
 import { routeToCartesianHeightMeters } from '../utils/route-math';
 
 @Component({
@@ -28,6 +28,7 @@ export class GlobeViewComponent implements AfterViewInit, OnDestroy {
   private fullRouteEntity: Cesium.Entity | null = null;
   private activeRouteEntity: Cesium.Entity | null = null;
   private planeEntity: Cesium.Entity | null = null;
+  private carrierLogo: CarrierLogo = 's7';
 
   private readonly progress = signal(0);
   private previousRenderState: {
@@ -89,7 +90,7 @@ export class GlobeViewComponent implements AfterViewInit, OnDestroy {
     this.planeEntity = this.viewer.entities.add({
       position: new Cesium.CallbackPositionProperty(() => this.currentPlanePosition(), false),
       billboard: {
-        image: makePlaneSvgDataUrl(),
+        image: makeCarrierLogoDataUrl(this.carrierLogo),
         verticalOrigin: Cesium.VerticalOrigin.CENTER,
         horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
         width: 42,
@@ -100,6 +101,14 @@ export class GlobeViewComponent implements AfterViewInit, OnDestroy {
 
     this.setProgress(0);
     this.setInteractionEnabled(true);
+  }
+
+  setCarrierLogo(logo: CarrierLogo): void {
+    this.carrierLogo = logo;
+    if (this.planeEntity?.billboard) {
+      this.planeEntity.billboard.image = new Cesium.ConstantProperty(makeCarrierLogoDataUrl(logo));
+      this.viewer?.scene.render();
+    }
   }
 
   setProgress(progress: number): void {
@@ -298,13 +307,32 @@ export class GlobeViewComponent implements AfterViewInit, OnDestroy {
   }
 }
 
-function makePlaneSvgDataUrl(): string {
+function makeCarrierLogoDataUrl(logo: CarrierLogo): string {
+  if (logo === 'aeroflot') {
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+        <circle cx="64" cy="64" r="58" fill="#123a66" stroke="#eff6ff" stroke-width="8" />
+        <text x="64" y="73" text-anchor="middle" fill="#eff6ff" font-size="30" font-family="Arial, sans-serif" font-weight="700">AF</text>
+      </svg>
+    `;
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  }
+
+  if (logo === 'airasia') {
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+        <circle cx="64" cy="64" r="58" fill="#d7263d" stroke="#ffecef" stroke-width="8" />
+        <text x="64" y="73" text-anchor="middle" fill="#ffffff" font-size="26" font-family="Arial, sans-serif" font-weight="700">AA</text>
+      </svg>
+    `;
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  }
+
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-      <circle cx="64" cy="64" r="58" fill="#102138" stroke="#f7f4ea" stroke-width="8" />
-      <path d="M20 66l74-30 14 14-46 16 20 22-11 11-30-18-15 5z" fill="#f7f4ea" />
+      <circle cx="64" cy="64" r="58" fill="#7AC70C" stroke="#f4ffdd" stroke-width="8" />
+      <text x="64" y="73" text-anchor="middle" fill="#123f0b" font-size="30" font-family="Arial, sans-serif" font-weight="700">S7</text>
     </svg>
   `;
-
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }

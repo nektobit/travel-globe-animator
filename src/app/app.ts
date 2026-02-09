@@ -10,7 +10,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { catchError, debounceTime, distinctUntilChanged, of, switchMap, tap } from 'rxjs';
-import { GeoPoint, GeocodeResult } from './models/types';
+import { CarrierLogo, GeoPoint, GeocodeResult } from './models/types';
 import { GlobeViewComponent } from './globe-view/globe-view.component';
 import { ExportService } from './services/export.service';
 import { GeocodingService } from './services/geocoding.service';
@@ -48,6 +48,11 @@ export class App {
   readonly exportProgressLabel = signal('');
 
   readonly state = inject(ProjectStateService);
+  readonly carrierLogoOptions: Array<{ value: CarrierLogo; label: string }> = [
+    { value: 's7', label: 'S7' },
+    { value: 'aeroflot', label: 'Aeroflot' },
+    { value: 'airasia', label: 'AirAsia' }
+  ];
 
   private readonly geocoding = inject(GeocodingService);
   private readonly exportService = inject(ExportService);
@@ -73,6 +78,16 @@ export class App {
 
   onArcHeightInput(value: number): void {
     this.state.setArcHeightKm(value);
+  }
+
+  onCarrierLogoChange(value: string): void {
+    const normalized = value as CarrierLogo;
+    if (!this.carrierLogoOptions.some((item) => item.value === normalized)) {
+      return;
+    }
+
+    this.state.setCarrierLogo(normalized);
+    this.globe?.setCarrierLogo(normalized);
   }
 
   selectFromCity(item: GeocodeResult): void {
@@ -103,6 +118,7 @@ export class App {
 
     const routePoints = buildGreatCircleArc(from, to, this.state.arcHeightKm(), 200);
     this.state.setRoute(routePoints);
+    this.globe?.setCarrierLogo(this.state.carrierLogo());
     this.globe?.setRoute(routePoints);
     this.globe?.fitToRoute();
 

@@ -62,7 +62,8 @@ label span {
   color: var(--muted);
 }
 
-input {
+input,
+select {
   height: 38px;
   border: 1px solid var(--line);
   border-radius: 10px;

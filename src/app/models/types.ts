@@ -23,3 +23,5 @@ export interface ExportResult {
   fileName: string;
   warning?: string;
 }
+
+export type CarrierLogo = 's7' | 'aeroflot' | 'airasia';

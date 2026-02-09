@@ -1,5 +1,5 @@
 import { Injectable, signal } from '@angular/core';
-import { GeoPoint, RoutePoint } from '../models/types';
+import { CarrierLogo, GeoPoint, RoutePoint } from '../models/types';
 
 @Injectable({ providedIn: 'root' })
 export class ProjectStateService {
@@ -12,6 +12,7 @@ export class ProjectStateService {
   readonly routePoints = signal<RoutePoint[]>([]);
   readonly durationSec = signal(8);
   readonly arcHeightKm = signal(800);
+  readonly carrierLogo = signal<CarrierLogo>('s7');
 
   readonly playing = signal(false);
   readonly progress = signal(0);
@@ -32,6 +33,10 @@ export class ProjectStateService {
   setArcHeightKm(value: number): void {
     const clamped = Number.isFinite(value) ? Math.min(3000, Math.max(50, value)) : 800;
     this.arcHeightKm.set(clamped);
+  }
+
+  setCarrierLogo(value: CarrierLogo): void {
+    this.carrierLogo.set(value);
   }
 
   setFromCoord(value: GeoPoint | null): void {
