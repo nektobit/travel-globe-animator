@@ -26,8 +26,14 @@ export class ExportService {
     renderer.setRenderSize(width, height);
 
     try {
+      let webCodecsError: string | null = null;
       if (this.canUseWebCodecs()) {
-        return await this.exportWithWebCodecs(renderer, width, height, fps, totalFrames, onProgress);
+        try {
+          return await this.exportWithWebCodecs(renderer, width, height, fps, totalFrames, onProgress);
+        } catch (error) {
+          webCodecsError =
+            error instanceof Error ? error.message : 'WebCodecs export failed for unknown reason.';
+        }
       }
 
       if (typeof MediaRecorder !== 'undefined') {
@@ -42,16 +48,18 @@ export class ExportService {
 
         return {
           ...fallbackVideo,
-          warning:
-            'WebCodecs недоступен: применён fallback через MediaRecorder. Результат зависит от мощности ПК и может быть не frame-perfect.'
+          warning: webCodecsError
+            ? `WebCodecs не завершил экспорт (${webCodecsError}). Применён fallback через MediaRecorder; результат может зависеть от мощности ПК.`
+            : 'WebCodecs недоступен: применён fallback через MediaRecorder. Результат зависит от мощности ПК и может быть не frame-perfect.'
         };
       }
 
       const zipResult = await this.exportAsPngZip(renderer, totalFrames, onProgress);
       return {
         ...zipResult,
-        warning:
-          'WebCodecs и MediaRecorder недоступны: экспортирована PNG-последовательность в ZIP (каждый 5-й кадр).'
+        warning: webCodecsError
+          ? `WebCodecs не завершил экспорт (${webCodecsError}), MediaRecorder недоступен: экспортирована PNG-последовательность в ZIP (каждый 5-й кадр).`
+          : 'WebCodecs и MediaRecorder недоступны: экспортирована PNG-последовательность в ZIP (каждый 5-й кадр).'
       };
     } finally {
       renderer.restoreRenderSize();
@@ -72,68 +80,114 @@ export class ExportService {
     totalFrames: number,
     onProgress: (progress: ExportProgress) => void
   ): Promise<ExportResult> {
-    const config: VideoEncoderConfig = {
-      codec: 'vp09.00.10.08',
-      width,
-      height,
-      bitrate: 16_000_000,
-      framerate: fps
-    };
+    const codecOptions: Array<{
+      config: VideoEncoderConfig;
+      muxCodec: string;
+    }> = [
+      {
+        config: {
+          codec: 'vp09.00.10.08',
+          width,
+          height,
+          bitrate: 16_000_000,
+          framerate: fps
+        },
+        muxCodec: 'V_VP9'
+      },
+      {
+        config: {
+          codec: 'vp8',
+          width,
+          height,
+          bitrate: 12_000_000,
+          framerate: fps
+        },
+        muxCodec: 'V_VP8'
+      }
+    ];
 
-    const supported = await VideoEncoder.isConfigSupported(config);
-    if (!supported.supported) {
-      throw new Error('WebCodecs есть, но VP9-конфигурация не поддерживается этим браузером.');
+    let chosen: { config: VideoEncoderConfig; muxCodec: string } | null = null;
+    for (const option of codecOptions) {
+      const supported = await VideoEncoder.isConfigSupported(option.config);
+      if (supported.supported) {
+        chosen = option;
+        break;
+      }
+    }
+
+    if (!chosen) {
+      throw new Error('WebCodecs есть, но поддерживаемый VP8/VP9 encoder не найден.');
     }
 
     const target = new ArrayBufferTarget();
     const muxer = new Muxer({
       target,
       video: {
-        codec: 'V_VP9',
+        codec: chosen.muxCodec,
         width,
         height,
         frameRate: fps
       }
     });
 
+    let encodeError: Error | null = null;
     const encoder = new VideoEncoder({
-      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+      output: (chunk, meta) => {
+        try {
+          muxer.addVideoChunk(chunk, meta);
+        } catch (error) {
+          encodeError = error instanceof Error ? error : new Error('Failed to mux encoded chunk.');
+        }
+      },
       error: (error) => {
-        throw error;
+        encodeError = error instanceof Error ? error : new Error('VideoEncoder failed.');
       }
     });
 
-    encoder.configure(config);
+    encoder.configure(chosen.config);
 
     const canvas = renderer.getCanvas();
 
-    for (let i = 0; i < totalFrames; i += 1) {
-      const progress = i / (totalFrames - 1);
-      renderer.setProgress(progress);
-      renderer.renderFrame();
+    try {
+      for (let i = 0; i < totalFrames; i += 1) {
+        const progress = i / (totalFrames - 1);
+        renderer.setProgress(progress);
+        renderer.renderFrame();
 
-      const frame = new VideoFrame(canvas, {
-        timestamp: Math.round((i / fps) * 1_000_000),
-        duration: Math.round((1 / fps) * 1_000_000)
-      });
+        const frame = new VideoFrame(canvas, {
+          timestamp: Math.round((i / fps) * 1_000_000),
+          duration: Math.round((1 / fps) * 1_000_000)
+        });
 
-      encoder.encode(frame, { keyFrame: i % fps === 0 });
-      frame.close();
+        encoder.encode(frame, { keyFrame: i % fps === 0 });
+        frame.close();
 
-      onProgress({ frame: i + 1, totalFrames });
-      if (i % 5 === 0) {
-        await this.nextMicrotask();
+        if (encodeError) {
+          throw encodeError;
+        }
+
+        await this.waitForQueueDrain(encoder, 8);
+        onProgress({ frame: i + 1, totalFrames });
+        if (i % 5 === 0) {
+          await this.nextMicrotask();
+        }
+      }
+
+      await this.withTimeout(encoder.flush(), 20_000, 'WebCodecs flush timeout.');
+      if (encodeError) {
+        throw encodeError;
+      }
+      muxer.finalize();
+
+      return {
+        blob: new Blob([target.buffer], { type: 'video/webm' }),
+        fileName: `travel-route-4k-${Date.now()}.webm`
+      };
+    } finally {
+      if (encoder.state !== 'closed') {
+        encoder.close();
       }
     }
-
-    await encoder.flush();
-    encoder.close();
-    muxer.finalize();
-
-    return {
-      blob: new Blob([target.buffer], { type: 'video/webm' }),
-      fileName: `travel-route-4k-${Date.now()}.webm`
-    };
   }
 
   private async exportWithMediaRecorder(
@@ -236,5 +290,44 @@ export class ExportService {
 
   private async sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async waitForQueueDrain(encoder: VideoEncoder, maxQueueSize: number): Promise<void> {
+    while (encoder.encodeQueueSize > maxQueueSize) {
+      await this.waitForDequeueEvent(encoder, 250);
+    }
+  }
+
+  private async waitForDequeueEvent(encoder: VideoEncoder, timeoutMs: number): Promise<void> {
+    await new Promise<void>((resolve) => {
+      let done = false;
+      const onDone = () => {
+        if (done) {
+          return;
+        }
+        done = true;
+        encoder.removeEventListener('dequeue', onDone);
+        resolve();
+      };
+
+      encoder.addEventListener('dequeue', onDone, { once: true });
+      setTimeout(onDone, timeoutMs);
+    });
+  }
+
+  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timeoutHandle = setTimeout(() => reject(new Error(message)), timeoutMs);
+        })
+      ]);
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
   }
 }

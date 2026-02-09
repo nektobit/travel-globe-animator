@@ -3,7 +3,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
-  NgZone,
   ViewChild,
   inject,
   signal
@@ -53,7 +52,6 @@ export class App {
   private readonly geocoding = inject(GeocodingService);
   private readonly exportService = inject(ExportService);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly ngZone = inject(NgZone);
 
   private rafId: number | null = null;
   private animationStartMs = 0;
@@ -130,30 +128,30 @@ export class App {
     this.baseProgress = this.state.progress();
     this.animationStartMs = performance.now();
 
-    this.ngZone.runOutsideAngular(() => {
-      const tick = (now: number) => {
-        if (!this.state.playing()) {
-          return;
-        }
+    const tick = (now: number) => {
+      if (!this.state.playing()) {
+        return;
+      }
 
-        const elapsedSec = (now - this.animationStartMs) / 1000;
-        const nextProgress = this.baseProgress + elapsedSec / this.state.durationSec();
+      const elapsedSec = (now - this.animationStartMs) / 1000;
+      const nextProgress = this.baseProgress + elapsedSec / this.state.durationSec();
 
-        if (nextProgress >= 1) {
-          this.state.setProgress(1);
-          this.globe?.setProgress(1);
-          this.state.setPlaying(false);
-          this.rafId = null;
-          return;
-        }
+      if (nextProgress >= 1) {
+        this.state.setProgress(1);
+        this.globe?.setProgress(1);
+        this.globe?.renderFrame();
+        this.state.setPlaying(false);
+        this.rafId = null;
+        return;
+      }
 
-        this.state.setProgress(nextProgress);
-        this.globe?.setProgress(nextProgress);
-        this.rafId = requestAnimationFrame(tick);
-      };
-
+      this.state.setProgress(nextProgress);
+      this.globe?.setProgress(nextProgress);
+      this.globe?.renderFrame();
       this.rafId = requestAnimationFrame(tick);
-    });
+    };
+
+    this.rafId = requestAnimationFrame(tick);
   }
 
   pause(): void {

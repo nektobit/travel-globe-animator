@@ -47,6 +47,7 @@ export class GlobeViewComponent implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.setInteractionEnabled(false);
     this.viewer?.destroy();
     this.viewer = null;
   }
@@ -64,7 +65,8 @@ export class GlobeViewComponent implements AfterViewInit, OnDestroy {
     this.removeEntities();
 
     if (!this.routeCartesians.length) {
-      this.viewer.scene.requestRender();
+      this.setInteractionEnabled(false);
+      this.viewer.scene.render();
       return;
     }
 
@@ -97,11 +99,12 @@ export class GlobeViewComponent implements AfterViewInit, OnDestroy {
     });
 
     this.setProgress(0);
+    this.setInteractionEnabled(true);
   }
 
   setProgress(progress: number): void {
     this.progress.set(Math.min(1, Math.max(0, progress)));
-    this.viewer?.scene.requestRender();
+    this.viewer?.scene.render();
   }
 
   fitToRoute(): void {
@@ -110,10 +113,12 @@ export class GlobeViewComponent implements AfterViewInit, OnDestroy {
     }
 
     const sphere = Cesium.BoundingSphere.fromPoints(this.routeCartesians);
-    this.viewer.camera.flyToBoundingSphere(sphere, {
-      duration: 0.9,
-      offset: new Cesium.HeadingPitchRange(0, -0.7, sphere.radius * 2.0)
-    });
+    this.viewer.camera.viewBoundingSphere(
+      sphere,
+      new Cesium.HeadingPitchRange(0, -0.7, sphere.radius * 2.0)
+    );
+    this.viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+    this.viewer.scene.render();
   }
 
   setRenderSize(width: number, height: number): void {
@@ -145,7 +150,7 @@ export class GlobeViewComponent implements AfterViewInit, OnDestroy {
     this.viewer.useBrowserRecommendedResolution = false;
     this.viewer.resolutionScale = 1 / window.devicePixelRatio;
     this.viewer.resize();
-    this.viewer.scene.requestRender();
+    this.viewer.scene.render();
   }
 
   restoreRenderSize(): void {
@@ -164,7 +169,7 @@ export class GlobeViewComponent implements AfterViewInit, OnDestroy {
     this.viewer.resolutionScale = this.previousRenderState.resolutionScale;
     this.viewer.useBrowserRecommendedResolution = true;
     this.viewer.resize();
-    this.viewer.scene.requestRender();
+    this.viewer.scene.render();
     this.previousRenderState = null;
   }
 
@@ -199,19 +204,55 @@ export class GlobeViewComponent implements AfterViewInit, OnDestroy {
         selectionIndicator: false,
         infoBox: false,
         requestRenderMode: true,
+        maximumRenderTimeChange: Number.POSITIVE_INFINITY,
         terrain: undefined
       });
 
       this.viewer.imageryLayers.removeAll();
       this.viewer.imageryLayers.addImageryProvider(imageryProvider);
       this.viewer.scene.globe.showGroundAtmosphere = true;
+      const cameraController = this.viewer.scene.screenSpaceCameraController;
+      cameraController.enableInputs = false;
+      cameraController.enableRotate = false;
+      cameraController.enableTranslate = false;
+      cameraController.enableZoom = false;
+      cameraController.enableTilt = false;
+      cameraController.enableLook = false;
+      cameraController.inertiaSpin = 0;
+      cameraController.inertiaTranslate = 0;
+      cameraController.inertiaZoom = 0;
       if (this.viewer.scene.skyAtmosphere) {
         this.viewer.scene.skyAtmosphere.hueShift = 0.08;
         this.viewer.scene.skyAtmosphere.saturationShift = 0.05;
       }
+      this.viewer.clock.clockStep = Cesium.ClockStep.TICK_DEPENDENT;
+      this.viewer.clock.canAnimate = false;
+      this.viewer.clock.multiplier = 0;
       this.viewer.clock.shouldAnimate = false;
-      this.viewer.scene.requestRender();
+      this.viewer.camera.cancelFlight();
+      this.viewer.camera.setView({
+        destination: Cesium.Cartesian3.fromDegrees(10, 22, 22_000_000)
+      });
+      this.setInteractionEnabled(false);
+      this.viewer.scene.render();
     });
+  }
+
+  private setInteractionEnabled(enabled: boolean): void {
+    if (!this.viewer) {
+      return;
+    }
+
+    const cameraController = this.viewer.scene.screenSpaceCameraController;
+    cameraController.enableInputs = enabled;
+    cameraController.enableRotate = enabled;
+    cameraController.enableTranslate = enabled;
+    cameraController.enableZoom = enabled;
+    cameraController.enableTilt = enabled;
+    cameraController.enableLook = enabled;
+    cameraController.inertiaSpin = 0;
+    cameraController.inertiaTranslate = 0;
+    cameraController.inertiaZoom = 0;
   }
 
   private removeEntities(): void {
